@@ -630,10 +630,20 @@ def generate_frida_script(func_desc: FuncDesc) -> str:
 
     # 打印返回值寄存器及返回值
     script.append(f"        onLeave: function(retval) {{")
-    script.append(
-        f"            console.log('Return Register {func_desc.ret_reg}: ' + this.context.{func_desc.ret_reg.lower()});  // {func_desc.ret_reg} (register)")
-    script.append(
-        f"            console.log('Return value: ' + retval);  // {func_desc.ret_ida_type} (return type)")
+    if func_desc.ret_reg is not None:
+        script.append(
+            f"            console.log('Return Register {func_desc.ret_reg}: ' + this.context.{func_desc.ret_reg.lower() if func_desc.ret_reg else 'None'});  // {func_desc.ret_reg} (register)"
+        )
+        script.append(
+            f"            console.log('Return value: ' + retval);  // {func_desc.ret_ida_type} (return type)"
+        )
+    else:
+        script.append(
+            f"            console.log('Return Register: None');  // {func_desc.ret_reg} (register)"
+        )
+        script.append(
+            f"            console.log('Return value: None');  // {func_desc.ret_ida_type} (return type)"
+        )
 
     script.append(f"        }}")
     script.append(f"    }});")
