@@ -584,7 +584,7 @@ def generate_frida_script(func_desc: FuncDesc) -> str:
     script.append(f"var offset = {offset};")
     script.append(f"var base_address = Process.findModuleByName(module_name);")
     script.append(f"if (base_address !== null) {{")
-    script.append(f"    var target_address = base_address.base.add(offset);")
+    script.append(f"    var target_address = base_address.base.add(hex(offset));")
     script.append(f"    console.log('Hooking function: {func_desc.name} at address: ' + target_address);")
 
     script.append(f"\n    Interceptor.attach(target_address, {{")
