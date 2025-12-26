@@ -72,28 +72,6 @@ While working with `.so` files in IDA, you can use the **Ctrl + Shift + F** hotk
 After selecting a function in IDA, press `Ctrl + Shift + F` to automatically generate the Frida hook script for that function. The generated script might look like this:
 
 ```javascript
-Interceptor.attach(ptr('0x12345678'), {
-    onEnter: function(args) {
-        console.log('Function entered');
-        console.log('Argument 0: ' + args[0].readS64());  // Read argument 0 as a signed 64-bit integer
-    },
-    onLeave: function(retval) {
-        console.log('Function exited');
-    }
-});
-```
-
-This automatically generated Frida hook script will hook the function at `0x12345678`, logging the function arguments and return value during execution.
-
-### Customize the Hook Script
-
-You can modify the generated hook script as per your needs. The generated script will include function prototypes and arguments based on the disassembly provided by IDA. You can adjust the hook behavior, change the logging format, or add custom logic to interact with the hooked function.
-
-#### Example:
-
-Here's how you might customize a generated hook script:
-
-```javascript
 var module_name = 'libkernel.so';
 var offset = 22239992;
 var base_address = Process.findModuleByName(module_name);
@@ -123,4 +101,4 @@ if (base_address !== null) {
 } else {
     console.log('Module not found');
 }
-
+```
