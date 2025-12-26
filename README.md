@@ -33,8 +33,7 @@
    Clone the `WaterDebug` repository to your local machine:
    ```bash
    git clone https://github.com/water5555/WaterDebug.git
-
-
+   
 2. **Install Required Python Dependencies**:
    With your Python environment activated, install the required dependencies using `pip`:
 
