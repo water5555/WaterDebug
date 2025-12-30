@@ -100,3 +100,29 @@ if (base_address !== null) {
     console.log('Module not found');
 }
 ```
+### Runtime Module Dump with Hotkey (Alt + D)
+
+WaterDebug supports dumping the **runtime memory image of a loaded module** during debugging.
+
+This feature allows you to export the module exactly as it exists in memory at runtime, which is useful when analyzing modules that have been decrypted, patched, or modified dynamically.
+
+Press **Alt + D** during debugging to dump the current runtime module to a file.
+
+#### Dump Output Path Configuration
+
+The dump output path is defined inside the following function:
+
+```python
+dump_runtime_module_segments()
+````
+
+If you need to change where the dumped module is saved, modify the output path inside
+`WaterDebug.py` in the `dump_runtime_module_segments` function.
+
+Example:
+
+```python
+out_path = r"C:\Users\water\Desktop\dump_" + os.path.basename(info.name)
+```
+
+You can adjust this path according to your workflow (for example, saving the dump relative to the current IDB file or to a custom directory).
