@@ -1,31 +1,3 @@
-#
-# waterdebug - expression evaluator & Frida script generator
-# expression jump: hotkey: w
-# Frida script generator: ctrl+shift+f
-import ida_bytes
-# MIT License
-#
-# Copyright (c) 2025 water5555
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-
 import ida_idd
 import pyperclip
 from lark import Lark, Transformer, v_args
@@ -34,7 +6,6 @@ import re
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import List
-
 import ida_dbg
 import ida_idp
 import ida_nalt
@@ -44,6 +15,7 @@ import ida_typeinf
 import idaapi
 import ida_kernwin
 import ida_funcs
+import ida_bytes
 
 # ============================================================
 # 架构信息
@@ -678,9 +650,6 @@ def waterFrida() -> str | None:
         return generate_frida_script(func_desc)
 
 def dump_runtime_module_segments():
-    """
-    获取运行时模块内存映射
-    """
     info = getRuntimeModuleInfo()
     if not info:
         print("[!] no runtime module")
