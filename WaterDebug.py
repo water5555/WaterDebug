@@ -2,7 +2,7 @@
 # waterdebug - expression evaluator & Frida script generator
 # expression jump: hotkey: w
 # Frida script generator: ctrl+shift+f
-
+import ida_bytes
 # MIT License
 #
 # Copyright (c) 2025 water5555
@@ -39,6 +39,7 @@ import ida_dbg
 import ida_idp
 import ida_nalt
 import ida_name
+import ida_segment
 import ida_typeinf
 import idaapi
 import ida_kernwin
@@ -176,40 +177,6 @@ _reg_list = get_all_registers()
 def eval_expression(expr: str) -> int:
     tree = _parser.parse(expr)
     return EvalTransformer(_reg_list).transform(tree)
-
-
-# ============================================================
-# WaterDebugPlugin - IDA 插件主体
-# ============================================================
-# 这是一个 IDA 插件，用于在调试时快速求值表达式并跳转到对应内存地址。
-# 支持的表达式示例：
-#   [[x0+0xd0]+0x28]
-# 可读取寄存器值、内存值，并进行基本算术计算。
-#
-# 插件功能：
-#   - 热键触发（默认 'w'）弹出输入框，输入表达式
-#   - 解析并计算表达式的数值
-#   - 输出计算结果到 IDA 消息窗口
-#   - 自动跳转到计算得到的内存地址
-#
-# 方法说明：
-#   init(self):
-#       插件初始化时调用，注册热键，并在消息窗口输出加载提示。
-#
-#   term(self):
-#       插件卸载时调用，在消息窗口输出卸载提示。
-#
-#   run(self, arg):
-#       插件运行时调用，直接触发 on_hotkey() 方法，等同于按下热键。
-#
-#   on_hotkey(self):
-#       热键触发或 run 调用时执行：
-#           1. 弹出输入框获取表达式
-#           2. 使用 eval_expression() 计算表达式结果
-#           3. 输出结果到 IDA 消息窗口
-#           4. 自动跳转到对应内存地址
-#       如果解析失败，会弹出警告。
-#
 
 @dataclass
 class ModuleOffsetInfo:
@@ -387,6 +354,18 @@ IDA_TYPE_TO_FRIDA_TYPE_MAP = {'BT_UNK': 'pointer', 'BT_VOID': 'void', 'BT_INT8':
                               'BT_SEGREG': 'pointer', 'BTF_TBYTE': 'pointer', 'BTF_TYPEDEF': 'pointer'}
 
 
+
+def getRuntimeModuleInfo()-> ida_idd.modinfo_t | None:
+    """
+    根据当前地址获取其对应的模块信息
+    """
+    ea = ida_kernwin.get_screen_ea()
+    modinfo = idaapi.modinfo_t()
+    if ida_dbg.get_module_info(ea, modinfo):
+        return modinfo
+    else:
+        return None
+
 def get_cursor_relative_offset() -> ModuleOffsetInfo:
     """
     根据当前光标地址，计算其相对于“所属模块”的偏移。
@@ -442,6 +421,8 @@ def get_cursor_relative_offset() -> ModuleOffsetInfo:
         base=image_base,
         offset=ea - image_base,
     )
+
+
 
 
 def get_function_start_ea_by_offset(module: ModuleOffsetInfo) -> int:
@@ -615,7 +596,7 @@ def generate_frida_script(func_desc: FuncDesc) -> str:
 
     # 加载模块的基址
     script.append(f"var module_name = '{module_name}';")
-    script.append(f"var offset = {offset};")
+    script.append(f"var offset = {hex(offset)};")
     script.append(f"var base_address = Process.findModuleByName(module_name);")
     script.append(f"if (base_address !== null) {{")
     script.append(f"    var target_address = base_address.base.add(offset);")
@@ -664,10 +645,20 @@ def generate_frida_script(func_desc: FuncDesc) -> str:
 
     # 打印返回值寄存器及返回值
     script.append(f"        onLeave: function(retval) {{")
-    script.append(
-        f"            console.log('Return Register {func_desc.ret_reg}: ' + this.context.{func_desc.ret_reg.lower()});  // {func_desc.ret_reg} (register)")
-    script.append(
-        f"            console.log('Return value: ' + retval);  // {func_desc.ret_ida_type} (return type)")
+    if func_desc.ret_reg is not None:
+        script.append(
+            f"            console.log('Return Register {func_desc.ret_reg}: ' + this.context.{func_desc.ret_reg.lower() if func_desc.ret_reg else 'None'});  // {func_desc.ret_reg} (register)"
+        )
+        script.append(
+            f"            console.log('Return value: ' + retval);  // {func_desc.ret_ida_type} (return type)"
+        )
+    else:
+        script.append(
+            f"            console.log('Return Register: None');  // {func_desc.ret_reg} (register)"
+        )
+        script.append(
+            f"            console.log('Return value: None');  // {func_desc.ret_ida_type} (return type)"
+        )
 
     script.append(f"        }}")
     script.append(f"    }});")
@@ -686,76 +677,100 @@ def waterFrida() -> str | None:
     else:
         return generate_frida_script(func_desc)
 
+def dump_runtime_module_segments():
+    """
+    获取运行时模块内存映射
+    """
+    info = getRuntimeModuleInfo()
+    if not info:
+        print("[!] no runtime module")
+        return
 
-# WaterDebug 插件
+    out_path = r"C:\Users\water\Desktop\dump_" + os.path.basename(info.name)
+
+    base = info.base
+    end  = info.base + info.size
+
+    buf = bytearray()
+    print(f"[+] dumping module: {info.name}")
+    print(f"    range: 0x{base:X} - 0x{end:X}")
+
+    seg = ida_segment.get_first_seg()
+    while seg:
+        seg_start = seg.start_ea
+        seg_end   = seg.end_ea
+
+        # 只处理落在 module 范围内的 segment
+        if seg_end <= base or seg_start >= end:
+            seg = ida_segment.get_next_seg(seg_start)
+            continue
+
+        read_start = max(seg_start, base)
+        read_end   = min(seg_end, end)
+        size = read_end - read_start
+
+        data = ida_bytes.get_bytes(read_start, size)
+        if data:
+            buf.extend(data)
+            print(f"    dumped segment: 0x{read_start:X}-0x{read_end:X}")
+        else:
+            print(f"    skip unreadable: 0x{read_start:X}")
+
+        seg = ida_segment.get_next_seg(seg_start)
+
+    with open(out_path, "wb") as f:
+        f.write(buf)
+
+    print(f"[+] dump done: {out_path}")
+    print(f"    total size: 0x{len(buf):X}")
+
+
 class WaterDebugPlugin(idaapi.plugin_t):
     flags = idaapi.PLUGIN_KEEP
-    comment = "waterdebug - expression evaluator & Frida script generator"
-    help = "Evaluate expressions like [[x0+0xd0]+0x28], Generate Frida script with Ctrl+Shift+F"
-    wanted_name = "waterdebug"
-    wanted_hotkey = "w"
+    comment = "WaterDebug - runtime helper"
+    help = "w: eval expression | Ctrl+Shift+F: Frida | Alt+D: dump module"
+    wanted_name = "WaterDebug"
+    wanted_hotkey = ""
 
     def init(self):
-        # 注册热键 'w' 调用 on_hotkey
-        ida_kernwin.add_hotkey("w", self.on_hotkey)
-        ida_kernwin.add_hotkey("Ctrl+Shift+F", self.generate_and_copy_frida_script)  # 注册 Frida 快捷键
-        ida_kernwin.msg("[waterdebug] loaded (hotkey = w, Ctrl+Shift+F for Frida)\n")
+        ida_kernwin.add_hotkey("w", self.on_eval)
+        ida_kernwin.add_hotkey("Ctrl+Shift+F", self.on_frida)
+        ida_kernwin.add_hotkey("Alt+D", self.on_dump)
+        ida_kernwin.msg("[WaterDebug] loaded\n")
         return idaapi.PLUGIN_KEEP
 
     def term(self):
-        ida_kernwin.msg("[waterdebug] unloaded\n")
+        ida_kernwin.msg("[WaterDebug] unloaded\n")
 
-    def run(self, arg):
-        # 运行插件时直接触发表达式输入
-        self.on_hotkey()
+    # def run(self, arg):
+    #     self.on_eval()
 
-    def on_hotkey(self):
-        # 弹出输入框，获取表达式
-        expr = ida_kernwin.ask_str(
-            "",
-            0,
-            "waterdebug expression"
-        )
-
+    def on_eval(self):
+        expr = ida_kernwin.ask_str("", 0, "WaterDebug expression")
         if not expr:
             return
-
         try:
-            # 计算表达式结果
             value = eval_expression(expr)
-            ida_kernwin.msg(
-                f"[waterdebug] {expr} = 0x{value:X}\n"
-            )
-
-            # 自动跳转到计算出的地址
+            ida_kernwin.msg(f"[WaterDebug] {expr} = 0x{value:X}\n")
             ida_kernwin.jumpto(value)
-
         except Exception as e:
-            # 出错时弹出警告
-            ida_kernwin.warning(f"[waterdebug] {e}")
+            ida_kernwin.warning(f"[WaterDebug] eval failed: {e}")
 
-    # 新增 Frida 脚本生成和复制功能
-    def generate_and_copy_frida_script(self):
+    def on_frida(self):
         try:
-
-            # 生成 Frida 脚本
             script = waterFrida()
-
             pyperclip.copy(script)
-            ida_kernwin.msg("[WaterDebug] Frida script copied to clipboard.\n")
-
+            ida_kernwin.msg("[WaterDebug] Frida script copied\n")
         except Exception as e:
-            ida_kernwin.warning(f"[WaterDebug] Error generating Frida script: {str(e)}")
+            ida_kernwin.warning(f"[WaterDebug] Frida failed: {e}")
+
+    def on_dump(self):
+        try:
+            dump_runtime_module_segments()
+            ida_kernwin.msg("[WaterDebug] dump triggered\n")
+        except Exception as e:
+            ida_kernwin.warning(f"[WaterDebug] dump failed: {e}")
 
 
-# IDA 插件入口
-def PLUGIN_ENTRY():
-    return WaterDebugPlugin()
-
-
-# ============================================================
-# IDA 插件入口
-# ============================================================
-# IDA 调用该函数获取插件实例
 def PLUGIN_ENTRY():
     return WaterDebugPlugin()
