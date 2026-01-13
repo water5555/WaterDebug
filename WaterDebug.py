@@ -1,3 +1,6 @@
+from keystone import *
+
+import ida_ida
 import ida_idd
 import pyperclip
 from lark import Lark, Transformer, v_args
@@ -10,22 +13,27 @@ import ida_dbg
 import ida_idp
 import ida_nalt
 import ida_name
-import ida_segment
 import ida_typeinf
 import idaapi
 import ida_kernwin
 import ida_funcs
-import ida_bytes
 
 # ============================================================
 # 架构信息
 # ============================================================
 
-ptr_size = 4
+def getArchMode():
+    is_64bit = ida_ida.idainfo_is_64bit()
+    is_32bit = ida_ida.idainfo_is_32bit()
 
-if idaapi.idainfo_is_64bit():
-    ptr_size = 8
+    if is_64bit:
+        return 8
+    elif is_32bit:
+        return 4
+    else: 
+        return 2
 
+mode = getArchMode()
 
 # ============================================================
 # 获取所有寄存器名称列表
@@ -48,7 +56,7 @@ def read_register(reg_name: str) -> int:
 # 读取内存值
 # ============================================================
 def read_memory(addr: int) -> int:
-    data = ida_idd.dbg_read_memory(addr, ptr_size)
+    data = ida_idd.dbg_read_memory(addr, mode)
     if not data:
         raise RuntimeError(f"无法读取内存: 0x{addr:X}")
     return int.from_bytes(data, byteorder="little", signed=False)
@@ -110,7 +118,7 @@ REGISTER: /[a-zA-Z_][a-zA-Z0-9_]*/
 #
 #   deref(value)：
 #       实现内存解引用 [value]，即读取给定地址的值。
-#       使用 read_memory 函数，根据 ptr_size 从调试器内存中读取数据。
+#       使用 read_memory 函数，根据 mode 从调试器内存中读取数据。
 
 @v_args(inline=True)
 class EvalTransformer(Transformer):
@@ -468,13 +476,13 @@ def build_func_desc() -> FuncDesc | None:
 
             args: list[ArgDesc] = []
 
-            ret_reg = ida_idp.get_reg_name(funcdata.retloc.reg1(), ptr_size)
+            ret_reg = ida_idp.get_reg_name(funcdata.retloc.reg1(), mode)
             for idx in range(funcdata.size()):
                 arg = funcdata[idx]
                 loc = arg.argloc
 
                 if loc.is_reg1():
-                    reg = ida_idp.get_reg_name(loc.reg1(), ptr_size)
+                    reg = ida_idp.get_reg_name(loc.reg1(), mode)
                 elif loc.in_stack:
                     reg = "stack"
                 args.append(
@@ -714,6 +722,8 @@ class WaterDebugPlugin(idaapi.plugin_t):
             ida_kernwin.msg("[WaterDebug] dump triggered\n")
         except Exception as e:
             ida_kernwin.warning(f"[WaterDebug] dump failed: {e}")
+
+
 
 
 def PLUGIN_ENTRY():
